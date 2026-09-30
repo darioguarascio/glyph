@@ -1,0 +1,8 @@
+[package]
+name = "glyph-ir"
+description = "GBC bytecode IR for Glyph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]

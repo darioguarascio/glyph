@@ -1,0 +1,15 @@
+[package]
+name = "glyph-cli"
+description = "Glyph native toolchain CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "glyph"
+path = "src/main.rs"
+
+[dependencies]
+glyph-ir = { path = "../glyph-ir" }
+glyph-vm = { path = "../glyph-vm" }
+glyph-frontend = { path = "../glyph-frontend" }

@@ -1,0 +1,9 @@
+[package]
+name = "glyph-vm"
+description = "Reference interpreter for Glyph GBC bytecode"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glyph-ir = { path = "../glyph-ir" }
