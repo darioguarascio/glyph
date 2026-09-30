@@ -1,0 +1,10 @@
+f main():v {
+  l i=1
+  w i<=100 {
+    l m=i%15
+    l a=i%3
+    l b=i%5
+    ? m==0 @ps,"FizzBuzz" ? a==0 @ps,"Fizz" ? b==0 @ps,"Buzz" @p,i
+    i=i+1
+  }
+}
