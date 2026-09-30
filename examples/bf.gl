@@ -1,0 +1,39 @@
+g mem:30000
+
+f sf(code:s,i:i):i {
+  l d=1
+  w d>0 {
+    i=i+1
+    l x=@ch,code,i
+    ? x==91 d=d+1 ? x==93 d=d-1 0
+  }
+  !i
+}
+
+f sb(code:s,i:i):i {
+  l d=1
+  w d>0 {
+    i=i-1
+    l x=@ch,code,i
+    ? x==93 d=d+1 ? x==91 d=d-1 0
+  }
+  !i
+}
+
+f h91(code:s,i:i,dp:i):i = ? mem[dp]==0 @sf,code,i i
+f h93(code:s,i:i,dp:i):i = ? mem[dp]!=0 @sb,code,i i
+
+f run(code:s):v {
+  l dp=0
+  l i=0
+  w i<@len,code {
+    l ch=@ch,code,i
+    ? ch==62 dp=dp+1 ? ch==60 dp=dp-1 ? ch==43 mem[dp]=mem[dp]+1 ? ch==45 mem[dp]=mem[dp]-1 ? ch==46 @o,mem[dp] ? ch==44 mem[dp]=@r ? ch==91 i=@h91,code,i,dp ? ch==93 i=@h93,code,i,dp 0
+    i=i+1
+  }
+}
+
+f main():v {
+  ? @argc<2 @ps,"usage: bf CODE"
+  @run,@argv,1
+}

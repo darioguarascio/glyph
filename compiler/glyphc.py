@@ -13,9 +13,10 @@ from enum import Enum, auto
 # --- Lexer ---
 
 class TT(Enum):
-    F = auto(); L = auto(); W = auto(); RET = auto()
+    F = auto(); G = auto(); GB = auto(); L = auto(); W = auto(); RET = auto()
     Q = auto(); AT = auto(); COLON = auto()
     LP = auto(); RP = auto(); LB = auto(); RB = auto()
+    LBR = auto(); RBR = auto()
     COMMA = auto(); EQ = auto()
     PLUS = auto(); MINUS = auto(); STAR = auto(); SLASH = auto(); PERCENT = auto()
     LT = auto(); GT = auto(); LE = auto(); GE = auto(); EQEQ = auto(); NE = auto()
@@ -29,7 +30,7 @@ class Tok:
     val: str = ""
     line: int = 0
 
-KEYWORDS = {"f": TT.F, "l": TT.L, "w": TT.W}
+KEYWORDS = {"f": TT.F, "g": TT.G, "gb": TT.GB, "l": TT.L, "w": TT.W}
 
 class Lexer:
     def __init__(self, src: str):
@@ -68,12 +69,14 @@ class Lexer:
         return s
 
     def read_string(self) -> str:
+        esc = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\", '"': '"'}
         self.advance()  # skip opening "
         s = ""
         while self.peek() and self.peek() != '"':
             if self.peek() == "\\":
                 self.advance()
-                s += self.advance()
+                c = self.advance()
+                s += esc.get(c, c)
             else:
                 s += self.advance()
         self.advance()  # closing "
@@ -105,7 +108,9 @@ class Lexer:
 
         self.advance()
         return Tok({
-            "f": TT.F, "(": TT.LP, ")": TT.RP, "{": TT.LB, "}": TT.RB,
+            "f": TT.F, "g": TT.G, "(": TT.LP, ")": TT.RP, "{": TT.LB, "}": TT.RB,
+            "gb": TT.GB,
+            "[": TT.LBR, "]": TT.RBR,
             ",": TT.COMMA, "=": TT.EQ, "+": TT.PLUS, "-": TT.MINUS,
             "*": TT.STAR, "/": TT.SLASH, "%": TT.PERCENT, "<": TT.LT,
             ">": TT.GT, ":": TT.COLON, "?": TT.Q, "@": TT.AT, "!": TT.RET,
@@ -185,10 +190,32 @@ class Assign:
     name: str
     expr: "Expr"
 
-Expr = Union[Num, Str, Var, BinOp, Unary, Ternary, Call, Assign]
+@dataclass
+class Index:
+    name: str
+    idx: "Expr"
+
+@dataclass
+class IndexAssign:
+    name: str
+    idx: "Expr"
+    expr: "Expr"
+
+@dataclass
+class GlobalArr:
+    name: str
+    size: str
+    byte: bool = False
+
+@dataclass
+class BlockExpr:
+    body: Block
+
+Expr = Union[Num, Str, Var, BinOp, Unary, Ternary, Call, Assign, Index, BlockExpr]
 
 @dataclass
 class Program:
+    globals: List[GlobalArr]
     funcs: List[Func]
 
 
@@ -232,16 +259,28 @@ class Parser:
         return False
 
     def parse(self) -> Program:
+        globals_ = []
         funcs = []
         script = []
         while self.cur.kind != TT.EOF:
-            if self.cur.kind == TT.F:
+            if self.cur.kind == TT.G:
+                globals_.append(self.global_arr(False))
+            elif self.cur.kind == TT.GB:
+                globals_.append(self.global_arr(True))
+            elif self.cur.kind == TT.F:
                 funcs.append(self.func())
             else:
                 script.append(self.stmt())
         if script and not any(f.name == "main" for f in funcs):
             funcs.append(Func("main", [], "v", Block(script)))
-        return Program(funcs)
+        return Program(globals_, funcs)
+
+    def global_arr(self, byte: bool) -> GlobalArr:
+        self.eat(TT.GB if byte else TT.G)
+        name = self.eat(TT.IDENT).val
+        self.eat(TT.COLON)
+        size = self.eat(TT.NUMBER).val
+        return GlobalArr(name, size, byte)
 
     def func(self) -> Func:
         self.eat(TT.F)
@@ -297,16 +336,23 @@ class Parser:
     def let_rhs(self) -> Expr:
         if self.match(TT.Q):
             cond = self.assign()
-            then = self.assign()
-            else_ = self.ternary()
+            then = self.branch()
+            else_ = self.branch()
             return Ternary(cond, then, else_)
+        return self.assign()
+
+    def branch(self) -> Expr:
+        if self.cur.kind == TT.LB:
+            return BlockExpr(self.block())
+        if self.cur.kind == TT.Q:
+            return self.ternary()
         return self.assign()
 
     def ternary(self) -> Expr:
         if self.match(TT.Q):
             cond = self.assign()
-            then = self.assign()
-            else_ = self.ternary()
+            then = self.branch()
+            else_ = self.branch()
             return Ternary(cond, then, else_)
         e = self.assign()
         if self.match(TT.Q):
@@ -321,6 +367,14 @@ class Parser:
             self.eat(TT.EQ)
             return Assign(name, self.assign())
         return self.compare()
+
+    def _add_from(self, left: Expr) -> Expr:
+        e = left
+        while self.cur.kind in (TT.PLUS, TT.MINUS):
+            op = "+" if self.cur.kind == TT.PLUS else "-"
+            self.cur = self._next()
+            e = BinOp(op, e, self.mul())
+        return e
 
     def _compare_from(self, left: Expr) -> Expr:
         ops = {TT.LT: "<", TT.GT: ">", TT.LE: "<=", TT.GE: ">=", TT.EQEQ: "==", TT.NE: "!="}
@@ -362,7 +416,18 @@ class Parser:
     def call(self) -> Expr:
         e = self.primary()
         while True:
-            if self.match(TT.LP):
+            if self.match(TT.LBR):
+                idx = self.assign()
+                self.eat(TT.RBR)
+                if isinstance(e, Var):
+                    e = Index(e.name, idx)
+                elif isinstance(e, Index):
+                    raise ParseError("nested index not supported", self.cur.line)
+                else:
+                    raise ParseError("index on non-identifier", self.cur.line)
+                if self.match(TT.EQ) and isinstance(e, Index):
+                    return IndexAssign(e.name, e.idx, self.assign())
+            elif self.match(TT.LP):
                 args = []
                 if self.cur.kind != TT.RP:
                     args.append(self.assign())
@@ -373,8 +438,6 @@ class Parser:
                     e = Call(e.name, args)
                 else:
                     raise ParseError("call on non-identifier", self.cur.line)
-            elif self.cur.kind == TT.AT and isinstance(e, type) and False:
-                pass
             else:
                 break
         return e
@@ -429,18 +492,34 @@ class Parser:
 
 # --- Codegen ---
 
-TYPE_MAP = {"i": "int64_t", "f": "double", "b": "int", "v": "void", "s": "char*"}
+TYPE_MAP = {"i": "int64_t", "f": "double", "b": "int", "v": "void", "s": "const char*"}
 
 BUILTINS = {
     "p": ("glyph_print_i", "i"),
     "pf": ("glyph_print_f", "f"),
     "ps": ("glyph_print_s", "s"),
+    "o": ("glyph_putc", "i"),
+    "r": ("glyph_getc", "i"),
+    "len": ("glyph_strlen", "s"),
+    "ch": ("glyph_char_at", "si"),
+    "argc": ("glyph_argc", "v"),
+    "argv": ("glyph_arg", "i"),
+    "tcpconn": ("glyph_tcp_connect", "si"),
+    "tcpsend": ("glyph_tcp_send", "isi"),
+    "tcpread": ("glyph_tcp_read", "isi"),
+    "tcpclose": ("glyph_tcp_close", "i"),
+    "stdout": ("glyph_write_stdout", "si"),
+    "parseurl": ("glyph_parse_http_url", "usss"),
+    "body": ("glyph_http_read_body", "i"),
 }
 
 
 class Codegen:
     def __init__(self, prog: Program):
         self.prog = prog
+        self.globals = {g.name for g in prog.globals}
+        self.byte_globals = {g.name for g in prog.globals if g.byte}
+        self.global_sizes = {g.name: g.size for g in prog.globals}
         self.func_types = {}
         for fn in prog.funcs:
             ps = [(p.name, TYPE_MAP.get(p.typ or "i", "int64_t")) for p in fn.params]
@@ -452,25 +531,41 @@ class Codegen:
     def gen(self) -> str:
         lines = [
             '#include "../runtime/glyph_rt.h"',
+            '#include "../runtime/glyph_net.h"',
             '#include <stdint.h>',
             '',
+            'int glyph_argc_val;',
+            'char **glyph_argv_val;',
+            '',
         ]
+        for g in self.prog.globals:
+            if g.byte:
+                lines.append(f"static char {g.name}[{g.size}];")
+            else:
+                lines.append(f"static int64_t {g.name}[{g.size}];")
+            lines.append("")
         for fn in self.prog.funcs:
             lines.append(self.gen_func(fn))
         if not any(f.name == "main" for f in self.prog.funcs):
-            lines.append("int main(void) { return 0; }")
+            lines.append("int main(int argc, char **argv) {")
+            lines.append("    glyph_argc_val = argc; glyph_argv_val = argv;")
+            lines.append("    return 0;")
+            lines.append("}")
         return "\n".join(lines) + "\n"
 
     def gen_func(self, fn: Func) -> str:
         rt, _ = self.func_types[fn.name]
-        if fn.name == "main" and fn.ret is None:
+        is_main = fn.name == "main"
+        if is_main:
             rt = "int"
         params = ", ".join(f"{TYPE_MAP.get(p.typ or 'i', 'int64_t')} {p.name}" for p in fn.params)
         sig = f"{rt} {fn.name}({params})"
         if isinstance(fn.body, Block):
-            body = self.gen_block(fn.body, indent=1, ret=rt)
-            if rt == "int" and fn.name == "main":
-                body = body.rstrip() + "\n    return 0;\n"
+            body = self.gen_block(fn.body, indent=1, ret=rt if not is_main else "void")
+            if is_main:
+                prelude = "    glyph_argc_val = argc;\n    glyph_argv_val = argv;\n"
+                sig = "int main(int argc, char **argv)"
+                body = prelude + body.rstrip() + "\n    return 0;\n"
             return f"{sig} {{\n{body}}}\n"
         expr = self.gen_expr(fn.body)
         if rt == "void":
@@ -495,6 +590,8 @@ class Codegen:
                     lines.append(f"{pad}return {e};")
             elif isinstance(s, Ternary):
                 lines.extend(self.gen_if_else(s, indent))
+            elif isinstance(s, IndexAssign):
+                lines.append(f"{pad}{self.gen_index_assign(s)};")
             else:
                 e = self.gen_expr(s)
                 if ret != "void":
@@ -516,13 +613,40 @@ class Codegen:
         pad = "    " * indent
         if isinstance(e, Ternary):
             return self.gen_if_else(e, indent)
+        if isinstance(e, BlockExpr):
+            blk = self.gen_block(e.body, indent, "void")
+            return [ln for ln in blk.split("\n") if ln.strip() or blk.strip()]
+        if isinstance(e, IndexAssign):
+            return [f"{pad}{self.gen_index_assign(e)};"]
+        if isinstance(e, Assign):
+            return [f"{pad}{self.gen_expr(e)};"]
         return [f"{pad}{self.gen_expr(e)};"]
+
+    def gen_index_assign(self, e: IndexAssign) -> str:
+        val = self.gen_expr(e.expr)
+        if e.name in self.byte_globals:
+            val = f"(char)({val})"
+        return f"{e.name}[{self.gen_expr(e.idx)}] = {val}"
 
     def gen_expr(self, e: Expr) -> str:
         if isinstance(e, Num):
             return e.val + (".0" if "." in e.val else "")
         if isinstance(e, Str):
-            return f'"{e.val}"'
+            out = []
+            for ch in e.val:
+                if ch == "\\":
+                    out.append("\\\\")
+                elif ch == '"':
+                    out.append('\\"')
+                elif ch == "\n":
+                    out.append("\\n")
+                elif ch == "\r":
+                    out.append("\\r")
+                elif ch == "\t":
+                    out.append("\\t")
+                else:
+                    out.append(ch)
+            return f'"{"".join(out)}"'
         if isinstance(e, Var):
             return e.name
         if isinstance(e, BinOp):
@@ -539,17 +663,52 @@ class Codegen:
             return f"({c} ? {t} : {el})"
         if isinstance(e, Call):
             if e.fn in BUILTINS:
-                c_fn, _ = BUILTINS[e.fn]
                 if e.fn == "p":
                     return f"glyph_print_i({self.gen_expr(e.args[0])})"
                 if e.fn == "pf":
                     return f"glyph_print_f({self.gen_expr(e.args[0])})"
                 if e.fn == "ps":
                     return f'glyph_print_s({self.gen_expr(e.args[0])})'
+                if e.fn == "o":
+                    return f"glyph_putc({self.gen_expr(e.args[0])})"
+                if e.fn == "r":
+                    return "glyph_getc()"
+                if e.fn == "len":
+                    return f"glyph_strlen({self.gen_expr(e.args[0])})"
+                if e.fn == "ch":
+                    return f"glyph_char_at({self.gen_expr(e.args[0])}, {self.gen_expr(e.args[1])})"
+                if e.fn == "argc":
+                    return "glyph_argc()"
+                if e.fn == "argv":
+                    return f"glyph_arg({self.gen_expr(e.args[0])})"
+                if e.fn == "tcpconn":
+                    return f"glyph_tcp_connect({self.gen_expr(e.args[0])}, {self.gen_expr(e.args[1])})"
+                if e.fn == "tcpsend":
+                    return f"glyph_tcp_send({self.gen_expr(e.args[0])}, {self.gen_expr(e.args[1])}, {self.gen_expr(e.args[2])})"
+                if e.fn == "tcpread":
+                    return f"glyph_tcp_read({self.gen_expr(e.args[0])}, {self.gen_expr(e.args[1])}, {self.gen_expr(e.args[2])})"
+                if e.fn == "tcpclose":
+                    return f"glyph_tcp_close({self.gen_expr(e.args[0])})"
+                if e.fn == "stdout":
+                    return f"glyph_write_stdout({self.gen_expr(e.args[0])}, {self.gen_expr(e.args[1])})"
+                if e.fn == "parseurl":
+                    hs = self.global_sizes.get("host", "256")
+                    ps = self.global_sizes.get("path", "2048")
+                    return f"glyph_parse_http_url({self.gen_expr(e.args[0])}, host, {hs}, path, {ps})"
+                if e.fn == "body":
+                    return f"glyph_http_read_body({self.gen_expr(e.args[0])})"
             args = ", ".join(self.gen_expr(a) for a in e.args)
             return f"{e.fn}({args})"
+        if isinstance(e, Index):
+            if e.name in self.byte_globals:
+                return f"(int64_t)(unsigned char){e.name}[{self.gen_expr(e.idx)}]"
+            return f"{e.name}[{self.gen_expr(e.idx)}]"
         if isinstance(e, Assign):
             return f"({e.name} = {self.gen_expr(e.expr)})"
+        if isinstance(e, BlockExpr):
+            lines = self.gen_block(e.body, indent=0, ret="void").strip().split("\n")
+            inner = " ".join(l.strip() for l in lines if l.strip())
+            return f"({{ {inner} }})"
         return "0"
 
 
@@ -559,9 +718,12 @@ def compile_source(src: str, out_path: str, rt_dir: str) -> None:
     rt_header = os.path.join(rt_dir, "glyph_rt.h")
     with tempfile.TemporaryDirectory() as tmp:
         c_path = os.path.join(tmp, "out.c")
+        net_c = os.path.join(rt_dir, "glyph_net.c")
         with open(c_path, "w") as f:
-            f.write(c_code.replace('"../runtime/glyph_rt.h"', f'"{rt_header}"'))
-        cmd = ["gcc", "-O2", "-std=c11", "-o", out_path, c_path]
+            c_code = c_code.replace('"../runtime/glyph_rt.h"', f'"{rt_header}"')
+            c_code = c_code.replace('"../runtime/glyph_net.h"', f'"{os.path.join(rt_dir, "glyph_net.h")}"')
+            f.write(c_code)
+        cmd = ["gcc", "-O2", "-std=c11", "-o", out_path, c_path, net_c]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             print(r.stderr, file=sys.stderr)

@@ -1,0 +1,52 @@
+gb host:256
+gb path:2048
+gb req:4096
+
+f adds(pos:i,s:s):i {
+  l j=0
+  w j<@len,s {
+    req[pos]=@ch,s,j
+    pos=pos+1
+    j=j+1
+  }
+  !pos
+}
+
+f build_req():i {
+  l n=0
+  n=adds(n,"GET ")
+  n=adds(n,path)
+  n=adds(n," HTTP/1.1\r\nHost: ")
+  n=adds(n,host)
+  n=adds(n,"\r\nConnection: close\r\n\r\n")
+  !n
+}
+
+f send_fail(fd:i):v {
+  @tcpclose,fd
+  @ps,"error: send failed"
+}
+
+f fetch(url:s):v {
+  l port=@parseurl,url
+  ? port<0 {
+    @ps,"error: bad url"
+  } {
+    l fd=@tcpconn,host,port
+    ? fd<0 {
+      @ps,"error: connect failed"
+    } {
+      l n=@build_req
+      l sent=@tcpsend,fd,req,n
+      ? sent<0 @send_fail,fd {
+        @body,fd
+        @tcpclose,fd
+      }
+    }
+  }
+}
+
+f main():v {
+  ? @argc<2 @ps,"usage: httpget http://HOST/PATH"
+  @fetch,@argv,1
+}

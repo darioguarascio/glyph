@@ -43,13 +43,39 @@ Each row = same natural-language prompt + generated program source.
 | Rust | 40 | 73 | 113 | 244 |
 | Go | 40 | 85 | 125 | 259 |
 
+### Bf
+
+**Prompt:** Write a Brainfuck interpreter: takes BF source as argv[1], 30000-cell tape, all 8 commands, matching bracket jumps.
+
+| Language | Prompt | Code | **Total** | Chars |
+|----------|--------|------|-----------|-------|
+| Glyph | 29 | 353 | **382** | 687 |
+| Python | 29 | 341 | 370 | 923 |
+| JavaScript | 29 | 363 | 392 | 1117 |
+| C | 29 | 411 | 440 | 1201 |
+| Rust | 29 | 473 | 502 | 1341 |
+| Go | 29 | 379 | 408 | 926 |
+
+### Httpget
+
+**Prompt:** Write an HTTP GET client: argv[1] is http://HOST/PATH, raw TCP sockets only (no curl/libcurl), parse URL, send HTTP/1.1 GET, print response body.
+
+| Language | Prompt | Code | **Total** | Chars |
+|----------|--------|------|-----------|-------|
+| Glyph | 42 | 312 | **354** | 767 |
+| Python | 42 | 526 | 568 | 1883 |
+| JavaScript | 42 | 458 | 500 | 1610 |
+| C | 42 | 1225 | 1267 | 3676 |
+| Rust | 42 | 576 | 618 | 2016 |
+| Go | 42 | 568 | 610 | 1745 |
+
 ### Aggregate
 
 | Language | Total Tokens | Savings vs C |
 |----------|--------------|-------------|
-| Glyph | 194 | +20.5% |
-| Python | 166 | +32.0% |
-| JavaScript | 184 | +24.6% |
-| C | 244 | +0.0% |
-| Rust | 203 | +16.8% |
-| Go | 225 | +7.8% |
+| Glyph | 930 | +52.3% |
+| Python | 1104 | +43.4% |
+| JavaScript | 1076 | +44.8% |
+| C | 1951 | +0.0% |
+| Rust | 1323 | +32.2% |
+| Go | 1243 | +36.3% |

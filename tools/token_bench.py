@@ -9,6 +9,8 @@ PROMPTS = {
     "hello": "Write a complete program that prints \"Hello, World!\" to stdout.",
     "fib": "Write a complete program with a recursive fibonacci function and print fib(10).",
     "fizzbuzz": "Write FizzBuzz: for i from 1 to 100, print Fizz if divisible by 3, Buzz if by 5, FizzBuzz if by both, else the number.",
+    "bf": "Write a Brainfuck interpreter: takes BF source as argv[1], 30000-cell tape, all 8 commands, matching bracket jumps.",
+    "httpget": "Write an HTTP GET client: argv[1] is http://HOST/PATH, raw TCP sockets only (no curl/libcurl), parse URL, send HTTP/1.1 GET, print response body.",
 }
 
 LANGS = ["gl", "py", "js", "c", "rs", "go"]
@@ -51,7 +53,7 @@ def main():
     if not enc:
         print("note: install tiktoken for accurate counts (pip install tiktoken)\n")
 
-    tasks = ["hello", "fib", "fizzbuzz"]
+    tasks = ["hello", "fib", "fizzbuzz", "bf", "httpget"]
     results = {t: {} for t in tasks}
 
     for task in tasks:
@@ -86,7 +88,7 @@ def main():
         print()
 
     # Summary row
-    print("## Aggregate (all 3 programs)")
+    print("## Aggregate (all programs)")
     print("| Language   | Total Tokens | vs C    |")
     print("|------------|--------------|---------|")
     totals = {lang: sum(results[t][lang]["total"] for t in tasks) for lang in LANGS}
