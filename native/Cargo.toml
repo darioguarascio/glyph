@@ -1,5 +1,12 @@
 [workspace]
-members = ["glyph-ir", "glyph-vm", "glyph-frontend", "glyph-cli"]
+members = [
+    "glyph-ir",
+    "glyph-vm",
+    "glyph-frontend",
+    "glyph-codegen",
+    "glyph-transpile",
+    "glyph-cli",
+]
 resolver = "2"
 
 [workspace.package]

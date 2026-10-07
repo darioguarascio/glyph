@@ -82,9 +82,16 @@ glyph/
 - Parity: hello, fib, fizzbuzz (VM execution, no gcc)
 - Remaining: bf, httpget, full builtin/syscall surface
 
-### M3 — Native codegen
-- Cranelift backend: GBC → ELF object → executable
-- Drop gcc from default pipeline
+### M3 — Native codegen ✓
+- Cranelift backend: GBC → ELF object → executable (`glyph build`)
+- Default pipeline no longer requires gcc
+
+### M3b — Language transpiler (optional backend)
+- Rust AST → target language (`native/glyph-transpile`)
+- **C** first target: replaces Python `glyphc.py` for gcc benchmarks and portability
+- `glyph emit-c` (source only), `glyph transpile` (C + gcc link)
+- Future targets: Rust, Python, etc. via same `Target` trait
+- Not canonical IR — GBC remains truth; transpile is export/debug/legacy path
 
 ### M4 — AI direct emission
 - Document token→GBC mapping for LLM prompts
@@ -96,9 +103,9 @@ glyph/
 
 ## What we explicitly reject
 
-- C as intermediate representation
-- “Native binary” meaning “gcc links our C”
-- Growing the Python transpiler with new features
+- C as **canonical** intermediate representation (GBC is truth)
+- “Native binary” as the **only** meaning of “compile” (Cranelift is default)
+- Growing the Python transpiler with new features (use `glyph-transpile` instead)
 - Optimizing for demo speed over IR/codegen correctness
 
 ## Backend choice

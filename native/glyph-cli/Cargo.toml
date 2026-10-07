@@ -13,3 +13,5 @@ path = "src/main.rs"
 glyph-ir = { path = "../glyph-ir" }
 glyph-vm = { path = "../glyph-vm" }
 glyph-frontend = { path = "../glyph-frontend" }
+glyph-codegen = { path = "../glyph-codegen" }
+glyph-transpile = { path = "../glyph-transpile" }

@@ -82,7 +82,8 @@ impl Vm {
         if self.module.functions.is_empty() {
             return Err(VmError::NoMain);
         }
-        self.call_fn(0, 0)?;
+        let entry = self.module.entry_fn() as u16;
+        self.call_fn(entry, 0)?;
         self.exec_current()
     }
 

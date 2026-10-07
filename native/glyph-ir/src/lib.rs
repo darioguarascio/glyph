@@ -352,6 +352,19 @@ impl Module {
         Ok(())
     }
 
+    /// Index of `main` if present, otherwise 0.
+    pub fn entry_fn(&self) -> usize {
+        self.functions
+            .iter()
+            .position(|f| {
+                self.strings
+                    .get(f.name_idx as usize)
+                    .map(|s| s == "main")
+                    .unwrap_or(false)
+            })
+            .unwrap_or(0)
+    }
+
     pub fn verify(&self) -> Result<(), IrError> {
         for g in &self.globals {
             if g.name_idx as usize >= self.strings.len() {
